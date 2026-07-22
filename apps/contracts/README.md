@@ -26,9 +26,12 @@ is bounded on-chain by the user's rules, a per-account cooldown, and target/toke
 whitelists. Kill switch: revoke the Superfluid flow-operator permission (a standard
 transaction).
 
-**Router-agnostic swaps.** `SmartAccountDCA.executeSwap` performs `params.target.call(params.data)`;
-the router and its calldata are built off-chain by the executor. Changing chain or DEX means
-changing whitelisted addresses in config — never the Solidity.
+**Forced-recipient swaps.** `SmartAccountDCA.executeSwap` swaps through a single, config-set
+Uniswap v3 **SwapRouter02** with `recipient` hardcoded to `address(this)` and an exact
+per-swap approval. The executor supplies only `(tokenIn, tokenOut, fee, amountIn, minAmountOut)`
+— never a target, calldata, or recipient — so it cannot redirect output or over-approve. The
+router address is a config value (`swapRouter`); changing DEX means changing that address, not
+the Solidity.
 
 ---
 
@@ -66,19 +69,19 @@ sequenceDiagram
     participant Vaults as StreamVaults
     participant SA as SmartAccountDCA
     participant Super as SuperToken
-    participant Router as Uniswap Universal Router
+    participant Router as Uniswap v3 SwapRouter02
     participant Dst as Settlement address
 
     Bot->>Vaults: executeSwap smartAccount, params
     activate Vaults
-    Note over Vaults: guard - executor key,<br/>target/token whitelist, cooldown
+    Note over Vaults: guard - executor key,<br/>token whitelist, cooldown
     Vaults->>SA: executeSwap params
     deactivate Vaults
     activate SA
     Note over SA: guard - rules set,<br/>target token allowed, min trade size
     SA->>Super: downgrade unwrap to underlying
-    SA->>Router: target.call data via Permit2 approval
-    Router-->>SA: output token
+    SA->>Router: exactInputSingle, recipient=address(this), exact approval
+    Router-->>SA: output token to the smart account
     Note over SA: enforce minAmountOut on realized delta
     SA->>Dst: transfer output
     deactivate SA
@@ -96,8 +99,7 @@ External dependencies on **Celo mainnet (42220)**, verified against Uniswap depl
 
 | Dependency | Address | Status |
 |---|---|---|
-| Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` | Canonical — reuse |
-| Uniswap Universal Router | `0x643770E279d5D0733F21d6DC03A8efbABf3255B4` | Reuse (whitelisted target) |
+| Uniswap v3 `SwapRouter02` | `0x5615CDAb10dc425a742d643d949a7F474C01abc4` | Fixed swap router (`config.swapRouter`) |
 | Superfluid `CFAv1Forwarder` | `0xcfA132E353cB4E398080B9700609bb008eceB125` | Canonical — reuse |
 | Superfluid `Host` | `0xA4Ff07cF81C02CFD356184879D953970cA957585` | — |
 | Superfluid `SuperTokenFactory` | `0x36be86dEe6BC726Ed0Cbd170ccD2F21760BC73D9` | Used to deploy the stream SuperToken |
@@ -117,7 +119,7 @@ External dependencies on **Celo mainnet (42220)**, verified against Uniswap depl
 
 ## Deltas from the reference implementation
 
-The core contract logic is copied unchanged. Two protocol-level differences apply on Celo.
+The core contract logic is copied largely unchanged. Three protocol-level differences apply.
 
 ### 1. The stream SuperToken must be deployed
 
@@ -143,36 +145,51 @@ changes**:
 The change is confined to the entrypoint: the `permit()` step and the `Permit2612Sig`
 parameter are dropped; everything downstream stays in one atomic call.
 
-Uniswap requires no contract-level replacement: `allowedTargets` is a multi-entry
-whitelist, so additional routers are added through config and the executor alone.
+### 3. Forced-recipient swaps via a fixed Uniswap v3 router
+
+The reference executes swaps through a bot-supplied `target.call(data)` (opaque calldata) with
+a Permit2 approval of the full balance — which lets a compromised executor redirect output to
+an arbitrary address. The Celo port replaces this with a **fixed, config-set Uniswap v3
+`SwapRouter02`** call whose `recipient` is hardcoded to the smart account (`address(this)`) and
+whose approval is bounded to the exact `amountIn`. The executor supplies only
+`(tokenIn, tokenOut, fee, amountIn, minAmountOut)`; it can no longer choose the target,
+calldata, or recipient. Permit2 is not used on this path (SwapRouter02 pulls via a plain ERC-20
+allowance).
+
+> Residual risk: `minAmountOut` is still executor-supplied, so a compromised executor could
+> still trade at a bad price (MEV/sandwich). Fully closing that requires an on-chain
+> price-oracle floor tied to the user's `maxSlippageBps` — tracked as a follow-up.
 
 ---
 
 ## Build & test
 
-The full suite runs against a **fork of Celo mainnet** — real addresses and liquidity:
+The unit suite is deterministic (mocks); the integration test self-forks Celo mainnet
+(`vm.createSelectFork`) against real Superfluid, so `forge test` runs both:
 
 ```bash
 forge build
+forge test -vvv                       # unit + self-forking Celo integration test
 
-# Fork tests
-forge test --fork-url https://forno.celo.org -vvv
-
-# Local fork node
+# Fork a local node for manual work
 anvil --fork-url https://forno.celo.org
 ```
 
-RPC endpoint (`foundry.toml`): `celo` → https://forno.celo.org
+RPC endpoint (`foundry.toml`): `celo` → https://forno.celo.org. The fork test honors
+`CELO_RPC_URL` and defaults to Forno.
+
+Status: **53 tests passing** (51 unit + 2 real-fork).
 
 ---
 
 ## Roadmap
 
-- [ ] Port contracts from the reference implementation into `src/` (Hardhat → Foundry)
-- [ ] `approve()` + single-call `onboard()` entrypoint
-- [ ] cUSDx SuperToken deployment script (`SuperTokenFactory`)
-- [ ] Celo mainnet address config
-- [ ] Fork-based test suite
+- [x] Port contracts from the reference implementation into `src/` (Hardhat → Foundry)
+- [x] `approve()` + single-call `onboard()` entrypoint
+- [x] Forced-recipient swaps via fixed Uniswap v3 `SwapRouter02`
+- [x] Unit + fork-based test suite (real Superfluid onboarding on the fork)
+- [ ] Deploy scripts (cUSDx via `SuperTokenFactory`, protocol wiring) + Celo address config file
+- [ ] On-chain oracle-derived slippage floor tied to `maxSlippageBps` (harden vs. a compromised executor)
 
 ## References
 

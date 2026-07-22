@@ -36,8 +36,9 @@ The chain (Celo) supports 7702 and the tokens support EIP-2612 `permit`; the blo
   flow-operator grant is itself a normal tx.
 - **DCA execution** by the off-chain executor bot — it uses its **own** key to send
   `executeSwap`, entirely unaffected by the wallet's signing limits.
-- **Reuse of Celo mainnet infrastructure** — Permit2, Uniswap Universal Router, and
-  Superfluid are already deployed; no redeploy needed.
+- **Reuse of Celo mainnet infrastructure** — Uniswap v3 (`SwapRouter02`) and Superfluid are
+  already deployed; no redeploy needed. Swaps go through the fixed router with `recipient`
+  forced to the smart account, so a compromised executor cannot redirect output.
 - **Kill switch** — the user revokes the flow-operator permission with one normal tx.
 
 ## What does not work (must drop or replace)
