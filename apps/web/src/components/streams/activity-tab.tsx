@@ -7,7 +7,7 @@ export function ActivityTab() {
   return (
     <div className="flex flex-1 flex-col px-5 pb-4 pt-6">
       <p className="font-display text-2xl font-semibold text-ink">Activity</p>
-      <p className="mt-1 text-sm text-ink-muted">Every swap your stream has executed.</p>
+      <p className="mt-1 text-sm text-ink-muted">Every buy your Auto-Invest has made.</p>
 
       <div className="mt-6">
         {swapHistory.map((s) => (

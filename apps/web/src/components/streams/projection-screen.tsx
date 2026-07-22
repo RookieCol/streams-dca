@@ -55,22 +55,22 @@ export function ProjectionScreen({ onBack }: { onBack: () => void }) {
       </button>
 
       <div className="flex items-center gap-1.5 text-[15px] font-medium text-ink-muted">
-        Future projection
+        Projection
         <Info className="h-3.5 w-3.5" />
       </div>
       <p className="font-display mt-1 text-4xl font-semibold tabular-nums text-ink">
         ${projectedValue.toFixed(2)}
       </p>
       <p className="mt-1 text-sm text-ink-muted">
-        Most likely stream value in <span className="font-medium text-ink">{projectionHighlightYear} years</span>
+        What you could have in <span className="font-medium text-ink">{projectionHighlightYear} years</span>
       </p>
 
       <div className="mt-4 flex items-center gap-4 text-xs text-ink-muted">
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-sm bg-flow-soft" /> Projection range
+          <span className="h-2 w-2 rounded-sm bg-flow-soft" /> Range
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-0.5 w-3 rounded-full bg-ink-faint" /> Current stream value
+          <span className="h-0.5 w-3 rounded-full bg-ink-faint" /> Today
         </span>
       </div>
 
@@ -120,7 +120,7 @@ export function ProjectionScreen({ onBack }: { onBack: () => void }) {
       </p>
 
       <div className="mt-8">
-        <p className="text-sm font-medium text-ink">Simulate one-time top-up</p>
+        <p className="text-sm font-medium text-ink">One-time boost</p>
         <div className="relative mt-6">
           <div
             className="absolute -top-8 -translate-x-1/2 rounded-lg bg-ink px-2 py-1 text-xs font-semibold text-white"
@@ -136,7 +136,7 @@ export function ProjectionScreen({ onBack }: { onBack: () => void }) {
             value={topUpIdx}
             onChange={(e) => setTopUpIdx(Number(e.target.value))}
             className="w-full accent-ink"
-            aria-label="Simulate one-time top-up amount"
+            aria-label="One-time boost amount"
           />
         </div>
       </div>

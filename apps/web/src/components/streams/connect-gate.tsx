@@ -48,7 +48,7 @@ export function RequireWallet({ children }: { children: React.ReactNode }) {
           <div>
             <p className="text-[15px] font-semibold text-ink">Connect your wallet</p>
             <p className="mt-1 text-sm text-ink-muted">
-              Open this app inside MiniPay, or connect a wallet to start streaming.
+              Open this app inside MiniPay, or connect a wallet to start investing.
             </p>
           </div>
           <div className="w-full max-w-[220px]">
