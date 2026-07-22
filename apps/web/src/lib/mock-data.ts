@@ -25,7 +25,7 @@ export const streamCycle = {
   streamedUsd: 87.5,
   budgetUsd: 140,
   pct: 62,
-  label: "Auto-DCA",
+  label: "Active",
 };
 
 // projection: 10 years, [low, high] band + a "most likely" line value
@@ -46,17 +46,12 @@ export const projectionHighlightYear = 5;
 export const currentValueUsd = balanceUsd;
 
 export const swapHistory = [
-  { id: "1", date: "Jul 21", pair: "USDC → WETH", amountUsd: 12.5, status: "filled" },
-  { id: "2", date: "Jul 20", pair: "USDC → WBTC", amountUsd: 12.5, status: "filled" },
-  { id: "3", date: "Jul 19", pair: "USDC → WETH", amountUsd: 12.5, status: "filled" },
-  { id: "4", date: "Jul 18", pair: "USDC → WETH", amountUsd: 12.5, status: "filled" },
-  { id: "5", date: "Jul 17", pair: "USDC → WBTC", amountUsd: 12.5, status: "filled" },
+  { id: "1", date: "Jul 21", pair: "USDC → WETH", amountUsd: 12.5, status: "done" },
+  { id: "2", date: "Jul 20", pair: "USDC → WBTC", amountUsd: 12.5, status: "done" },
+  { id: "3", date: "Jul 19", pair: "USDC → WETH", amountUsd: 12.5, status: "done" },
+  { id: "4", date: "Jul 18", pair: "USDC → WETH", amountUsd: 12.5, status: "done" },
+  { id: "5", date: "Jul 17", pair: "USDC → WBTC", amountUsd: 12.5, status: "done" },
+  { id: "6", date: "Jul 16", pair: "USDC → WETH", amountUsd: 12.5, status: "done" },
+  { id: "7", date: "Jul 15", pair: "USDC → WBTC", amountUsd: 12.5, status: "done" },
 ] as const;
 
-export const streamRules = [
-  { label: "Target assets", value: "WETH, WBTC" },
-  { label: "Flow rate", value: "$12.50 / day" },
-  { label: "Max slippage", value: "0.5%" },
-  { label: "Min trade size", value: "$5.00" },
-  { label: "Settlement address", value: "Your wallet" },
-] as const;
