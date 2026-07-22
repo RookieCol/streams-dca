@@ -11,26 +11,44 @@ import { StreamTab } from "./stream-tab";
 import { RulesTab } from "./rules-tab";
 import { ActivityTab } from "./activity-tab";
 import { ProfileTab } from "./profile-tab";
+import { NotificationsSheet } from "./notifications-sheet";
+import { RulesProvider, useRules, type Asset, type Frequency, type RiskLevel } from "./rules-context";
 
 const TAB_TITLE: Record<TabKey, string> = {
-  home: "Stream Vault",
+  home: "Portfolio",
   rules: "Rules",
-  stream: "Stream",
+  stream: "Auto-Invest",
   activity: "Activity",
   profile: "Profile",
 };
 
 type PushedScreen = "none" | "projection" | "form" | "congrats";
-type StreamSubmission = { budget: number; flowRate: number; asset: string; slippage: number };
+type StreamSubmission = {
+  budget: number;
+  flowRate: number;
+  asset: Asset;
+  frequency: Frequency;
+  riskLevel: RiskLevel;
+};
 
 export function AppShell() {
+  return (
+    <RulesProvider>
+      <AppShellInner />
+    </RulesProvider>
+  );
+}
+
+function AppShellInner() {
   const [tab, setTab] = useState<TabKey>("home");
   const [screen, setScreen] = useState<PushedScreen>("none");
   const [submission, setSubmission] = useState<StreamSubmission | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const rules = useRules();
 
   if (screen === "projection") {
     return (
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <ProjectionScreen onBack={() => setScreen("none")} />
       </div>
     );
@@ -38,11 +56,15 @@ export function AppShell() {
 
   if (screen === "form") {
     return (
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <StartStreamForm
           onBack={() => setScreen("none")}
           onSubmit={(values) => {
             setSubmission(values);
+            rules.setAssets([values.asset]);
+            rules.setFlowRatePerDay(values.flowRate);
+            rules.setFrequency(values.frequency);
+            rules.setRiskLevel(values.riskLevel);
             setScreen("congrats");
           }}
         />
@@ -52,11 +74,12 @@ export function AppShell() {
 
   if (screen === "congrats" && submission) {
     return (
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <CongratsScreen
           budget={submission.budget}
           flowRate={submission.flowRate}
           asset={submission.asset}
+          frequency={submission.frequency}
           onDone={() => {
             setScreen("none");
             setTab("stream");
@@ -67,9 +90,9 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <TopHeader title={TAB_TITLE[tab]} />
-      <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <TopHeader title={TAB_TITLE[tab]} onNotificationsClick={() => setNotificationsOpen(true)} />
+      <div key={tab} className="flex min-h-0 flex-1 flex-col overflow-y-auto animate-in fade-in duration-200">
         {tab === "home" && (
           <HomeTab
             onOpenProjection={() => setScreen("projection")}
@@ -83,6 +106,7 @@ export function AppShell() {
         {tab === "profile" && <ProfileTab />}
       </div>
       <BottomNav active={tab} onChange={setTab} />
+      <NotificationsSheet open={notificationsOpen} onOpenChange={setNotificationsOpen} />
     </div>
   );
 }
