@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
+import { cn, pressFeedback } from "@/lib/utils";
 
 const SIZE = 40;
 const STROKE = 5;
@@ -26,15 +27,15 @@ export function StreamCycleCard({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-between border-t border-line py-4 text-left"
+      className={cn("flex w-full items-center justify-between border-t border-line py-4 text-left", pressFeedback)}
     >
       <div>
         <div className="flex items-center gap-1 text-[15px] font-medium text-ink">
-          This cycle&rsquo;s stream
+          This month
           <ChevronRight className="h-4 w-4 text-ink-faint" />
         </div>
         <p className="mt-0.5 text-sm text-ink-muted">
-          ${streamedUsd.toFixed(2)} of ${budgetUsd.toFixed(2)} streamed
+          ${streamedUsd.toFixed(2)} of ${budgetUsd.toFixed(2)} invested
         </p>
       </div>
       <div className="flex items-center gap-3">

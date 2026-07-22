@@ -1,14 +1,14 @@
 "use client";
 
 import { TrendingUp, Target, Infinity as InfinityIcon, Layers, User } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, pressFeedback } from "@/lib/utils";
 
 export type TabKey = "home" | "rules" | "stream" | "activity" | "profile";
 
 const TABS: { key: TabKey; label: string; icon: typeof TrendingUp }[] = [
   { key: "home", label: "Portfolio", icon: TrendingUp },
   { key: "rules", label: "Rules", icon: Target },
-  { key: "stream", label: "Stream", icon: InfinityIcon },
+  { key: "stream", label: "Auto", icon: InfinityIcon },
   { key: "activity", label: "Activity", icon: Layers },
   { key: "profile", label: "Profile", icon: User },
 ];
@@ -30,13 +30,14 @@ export function BottomNav({
             key={key}
             type="button"
             onClick={() => onChange(key)}
-            className="flex flex-1 flex-col items-center gap-1 py-1.5"
+            className={cn("flex flex-1 flex-col items-center gap-1 py-1.5", pressFeedback)}
             aria-current={isActive ? "page" : undefined}
             aria-label={label}
           >
             <span
               className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+                "flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200",
+                isActive && "scale-110",
                 isStream && isActive && "bg-ink text-white",
                 isStream && !isActive && "text-ink",
                 !isStream && isActive && "text-ink",
