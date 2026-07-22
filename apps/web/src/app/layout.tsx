@@ -1,15 +1,15 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Inter_Tight } from 'next/font/google';
 import './globals.css';
 
-import { Navbar } from '@/components/navbar';
 import { WalletProvider } from "@/components/wallet-provider"
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'], variable: '--font-body' });
+const interTight = Inter_Tight({ subsets: ['latin'], variable: '--font-display' });
 
 export const metadata: Metadata = {
-  title: 'streams-dca',
-  description: 'A DCA miniapp',
+  title: 'Stream Vault',
+  description: 'Capital streaming for Celo, in your pocket.',
 };
 
 export default function RootLayout({
@@ -19,16 +19,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        {/* Navbar is included on all pages */}
-        <div className="relative flex min-h-screen flex-col">
-          <WalletProvider>
-            <Navbar />
-            <main className="flex-1">
+      <body className={`${inter.variable} ${interTight.variable} font-sans bg-[#EDEDEF]`}>
+        <WalletProvider>
+          <div className="flex min-h-screen justify-center">
+            <div className="relative flex w-full max-w-[430px] flex-col bg-white min-h-screen shadow-[0_0_60px_rgba(0,0,0,0.08)]">
               {children}
-            </main>
-          </WalletProvider>
-        </div>
+            </div>
+          </div>
+        </WalletProvider>
       </body>
     </html>
   );

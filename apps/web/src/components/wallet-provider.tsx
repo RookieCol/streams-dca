@@ -2,18 +2,17 @@
 
 import { RainbowKitProvider, connectorsForWallets } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
-import { injectedWallet } from "@rainbow-me/rainbowkit/wallets";
+import { injectedWallet, walletConnectWallet } from "@rainbow-me/rainbowkit/wallets";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { WagmiProvider, createConfig, http, useConnect } from "wagmi";
 import { celo, celoSepolia } from "wagmi/chains";
-import { ConnectButton } from "./connect-button";
 
 const connectors = connectorsForWallets(
   [
     {
       groupName: "Recommended",
-      wallets: [injectedWallet],
+      wallets: [injectedWallet, walletConnectWallet],
     },
   ],
   {

@@ -1,3 +1,5 @@
+const defaultTheme = require("tailwindcss/defaultTheme");
+
 /** @type {import('tailwindcss').Config} */
 const config = {
   darkMode: ["class"],
@@ -52,6 +54,23 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        ink: {
+          DEFAULT: "#0B0C0E",
+          muted: "#8A8F98",
+          faint: "#C7CAD1",
+        },
+        surface: "#F7F7F8",
+        line: "#ECECEE",
+        flow: {
+          DEFAULT: "#00C2A8",
+          soft: "#E3F9F5",
+        },
+        gain: "#16A34A",
+        loss: "#E5484D",
+      },
+      fontFamily: {
+        sans: ["var(--font-body)", ...defaultTheme.fontFamily.sans],
+        display: ["var(--font-display)", ...defaultTheme.fontFamily.sans],
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -67,10 +86,21 @@ const config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "flow-dash": {
+          to: { strokeDashoffset: "-24" },
+        },
+        "flow-pulse": {
+          "0%": { offsetDistance: "0%", opacity: "0" },
+          "8%": { opacity: "1" },
+          "92%": { opacity: "1" },
+          "100%": { offsetDistance: "100%", opacity: "0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "flow-dash": "flow-dash 1s linear infinite",
+        "flow-pulse": "flow-pulse 2.6s ease-in-out infinite",
       },
     },
   },
