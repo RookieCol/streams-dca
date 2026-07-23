@@ -6,6 +6,7 @@ pragma solidity ^0.8.30;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 // local
@@ -13,6 +14,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ISmartAccountDCA} from "./interfaces/ISmartAccountDCA.sol";
 import {IStreamVaults} from "../../core/interfaces/IStreamVaults/IStreamVaults.sol";
 import {IStreamVaultsConfig} from "../../core/interfaces/IStreamVaults/IStreamVaultsConfig.sol";
+import {IHybridPriceOracle} from "../../core/interfaces/IHybridPriceOracle.sol";
 import {ISwapRouter02} from "../../core/interfaces/external/ISwapRouter02.sol";
 import {ISuperToken} from "../../core/interfaces/external/ISuperToken.sol";
 /// libraries
@@ -154,10 +156,22 @@ contract SmartAccountDCA is
 		// 3. Resolve the FIXED, config-set Uniswap v3 SwapRouter02. Routing through
 		//    a fixed router with recipient hardcoded to address(this) makes it
 		//    impossible for the bot to redirect swap output elsewhere.
-		ISwapRouter02 router = ISwapRouter02(
-			IStreamVaultsConfig(IStreamVaults(_operator).config()).swapRouter()
+		IStreamVaultsConfig config = IStreamVaultsConfig(
+			IStreamVaults(_operator).config()
 		);
+		ISwapRouter02 router = ISwapRouter02(config.swapRouter());
 		if (isZeroAddress(address(router))) revert INVALID_ADDRESS();
+
+		// 3b. Derive the ORACLE floor from the USER's max slippage. This is the
+		//     trust anchor: the executor-supplied `minAmountOut` can only make the
+		//     bound stricter, never looser than what the oracle allows.
+		uint256 floor = IHybridPriceOracle(config.oracle()).minAmountOut(
+			params.tokenIn,
+			params.tokenOut,
+			params.amountIn,
+			_maxSlippageBps
+		);
+		uint256 effectiveMin = Math.max(floor, params.minAmountOut);
 
 		// 4. Approve exactly the per-swap input, execute, then revoke.
 		tokenIn.forceApprove(address(router), params.amountIn);
@@ -170,7 +184,7 @@ contract SmartAccountDCA is
 				fee: params.fee,
 				recipient: address(this),
 				amountIn: params.amountIn,
-				amountOutMinimum: params.minAmountOut,
+				amountOutMinimum: effectiveMin,
 				sqrtPriceLimitX96: 0
 			})
 		);
@@ -179,7 +193,7 @@ contract SmartAccountDCA is
 		// 5. Measure realized delta on THIS account; defense-in-depth slippage.
 		uint256 outAfter = tokenOut.balanceOf(address(this));
 		amountOut = outAfter - outBefore;
-		if (amountOut < params.minAmountOut) revert INSUFFICIENT_OUTPUT();
+		if (amountOut < effectiveMin) revert INSUFFICIENT_OUTPUT();
 
 		// 6. Forward output to the user's settlement address.
 		tokenOut.safeTransfer(_settlementAddress, amountOut);

@@ -27,6 +27,11 @@ interface IStreamVaultsConfig {
 		address indexed newSwapRouter
 	);
 
+	event OracleUpdated(
+		address indexed previousOracle,
+		address indexed newOracle
+	);
+
 	event CfaForwarderUpdated(
 		address indexed previousForwarder,
 		address indexed newForwarder
@@ -56,6 +61,9 @@ interface IStreamVaultsConfig {
 	/// @notice Sets the fixed Uniswap v3 SwapRouter02 used for all swaps. Owner-only.
 	function setSwapRouter(address newSwapRouter) external;
 
+	/// @notice Sets the hybrid price-floor oracle used to bound swap output. Owner-only.
+	function setOracle(address newOracle) external;
+
 	function setCfaForwarder(address newForwarder) external;
 
 	/// @notice Updates the minimum accumulation window (in seconds) used by
@@ -80,6 +88,9 @@ interface IStreamVaultsConfig {
 
 	/// @notice Fixed Uniswap v3 SwapRouter02 through which all swaps are routed.
 	function swapRouter() external view returns (address);
+
+	/// @notice Hybrid price-floor oracle used to derive the minimum swap output.
+	function oracle() external view returns (address);
 
 	function cfaForwarder() external view returns (address);
 

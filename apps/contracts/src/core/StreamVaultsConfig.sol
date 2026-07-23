@@ -38,6 +38,7 @@ contract StreamVaultsConfig is
 	address private _smartAccountImplementation;
 	address private _permit2;
 	address private _swapRouter;
+	address private _oracle;
 	address private _cfaForwarder;
 	mapping(address => bool) private _allowedTargets;
 	mapping(address => bool) private _supportedSwapTokens;
@@ -61,6 +62,7 @@ contract StreamVaultsConfig is
 		address smartAccountImpl_,
 		address permit2_,
 		address swapRouter_,
+		address oracle_,
 		address cfaForwarder_,
 		uint256 minStreamAccumulationWindow_
 	) external initializer {
@@ -70,6 +72,7 @@ contract StreamVaultsConfig is
 			isZeroAddress(smartAccountImpl_) ||
 			isZeroAddress(permit2_) ||
 			isZeroAddress(swapRouter_) ||
+			isZeroAddress(oracle_) ||
 			isZeroAddress(cfaForwarder_)
 		) revert INVALID_ADDRESS();
 
@@ -83,6 +86,7 @@ contract StreamVaultsConfig is
 		_smartAccountImplementation = smartAccountImpl_;
 		_permit2 = permit2_;
 		_swapRouter = swapRouter_;
+		_oracle = oracle_;
 		_cfaForwarder = cfaForwarder_;
 		_minStreamAccumulationWindow = minStreamAccumulationWindow_;
 
@@ -90,6 +94,7 @@ contract StreamVaultsConfig is
 		emit SmartAccountImplementationUpdated(address(0), smartAccountImpl_);
 		emit Permit2Updated(address(0), permit2_);
 		emit SwapRouterUpdated(address(0), swapRouter_);
+		emit OracleUpdated(address(0), oracle_);
 		emit CfaForwarderUpdated(address(0), cfaForwarder_);
 		emit MinStreamAccumulationWindowUpdated(0, minStreamAccumulationWindow_);
 	}
@@ -144,6 +149,13 @@ contract StreamVaultsConfig is
 		emit SwapRouterUpdated(prev, newSwapRouter);
 	}
 
+	function setOracle(address newOracle) external onlyOwner {
+		if (isZeroAddress(newOracle)) revert INVALID_ADDRESS();
+		address prev = _oracle;
+		_oracle = newOracle;
+		emit OracleUpdated(prev, newOracle);
+	}
+
 	function setCfaForwarder(address newForwarder) external onlyOwner {
 		if (isZeroAddress(newForwarder)) revert INVALID_ADDRESS();
 		address prev = _cfaForwarder;
@@ -188,6 +200,10 @@ contract StreamVaultsConfig is
 
 	function swapRouter() external view returns (address) {
 		return _swapRouter;
+	}
+
+	function oracle() external view returns (address) {
+		return _oracle;
 	}
 
 	function cfaForwarder() external view returns (address) {
