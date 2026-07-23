@@ -62,6 +62,14 @@ contract Errors {
 	error SWAP_CALL_FAILED();
 	error SWAP_COOLDOWN_ACTIVE();
 
+	/// ==========================
+	/// ========= Oracle =========
+	/// ==========================
+
+	error NO_PRICE_SOURCE();
+	error ORACLE_DEVIATION();
+	error STALE_PRICE();
+
 	function isZeroAddress(address _address) internal pure returns (bool) {
 		return _address == address(0);
 	}
