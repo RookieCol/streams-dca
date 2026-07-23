@@ -109,6 +109,38 @@ signature scheme this repo lacks. We deliberately keep our on-chain DCA (bot-tri
 forced-recipient, oracle floor) instead of Squid's off-chain-generated calldata — Squid's
 generic multicall + arbitrary calldata is exactly what our forced-recipient model rejects.
 
+### Why the buy "feels like one tap" — first-party auto-signing (UX finding)
+
+MiniPay's buy is **two on-chain transactions** (`approve` then `fundAndRunMulticall`), yet
+the user only sees one action and **never confirms the approve**. This is not a contract
+trick and the two txs are not merged — it is a **wallet-policy** effect:
+
+- MiniPay is an **embedded / custodial wallet**: the signing key lives inside the app, so
+  showing a confirmation is a **UX choice, not a cryptographic requirement**. The wallet can
+  sign and broadcast an `eth_sendTransaction` with no prompt.
+- The Buy Mini-Apps are **first-party** (built/blessed by MiniPay), so MiniPay **auto-signs
+  their transactions silently**. One "Buy" tap → the app fires both txs → the wallet signs
+  both without a modal. Two txs, one interaction.
+
+**Implication for a third-party dapp (us):** we do **not** get silent auto-signing. MiniPay
+surfaces a confirmation sheet per transaction for third-party apps, and it exposes no
+batching (`wallet_sendCalls` / EIP-5792) or off-chain signatures (`permit` / Permit2) to
+collapse them. So we cannot make our `approve` invisible the way the first-party Buy app
+does — that privilege is not something code can grant itself.
+
+**What we can do to approximate the one-tap feel:**
+1. **`approve(spender, MAX_UINT256)` once** — same trick MiniPay uses; the approval stops
+   reappearing on later actions (first action = approve + call, every later one = 1 call).
+2. **Recurring buys run on the bot's key**, not the user's wallet → **zero user
+   confirmations per buy** after onboarding (better than MiniPay's one-tap-per-buy).
+3. The only visible cost is the **one-time onboarding** (`approve` → Superfluid
+   flow-operator `grant` → `onboard`), which will show MiniPay confirmations for a
+   third-party app.
+
+**The only way to get MiniPay's actual silence** is to be integrated as an **official
+MiniPay Mini-App** (allowlist / partnership, so the wallet extends auto-signing), or for
+MiniPay to add EIP-5792 batching. Both are integration/product levers, not code changes.
+
 ### Celo liquidity map (Uniswap v3, verified via RPC)
 
 | Target | Direct cUSD pool | Direct USDT pool |
