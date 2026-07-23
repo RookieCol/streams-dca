@@ -7,6 +7,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {StreamVaults} from "../src/core/StreamVaults.sol";
 import {StreamVaultsConfig} from "../src/core/StreamVaultsConfig.sol";
 import {SmartAccountDCA} from "../src/strategies/dca/SmartAccountDCA.sol";
+import {HybridPriceOracle} from "../src/core/oracle/HybridPriceOracle.sol";
 import {Types} from "../src/core/libraries/Types.sol";
 
 import {MockERC20Permit} from "./mocks/MockERC20Permit.sol";
@@ -14,6 +15,7 @@ import {MockSuperToken} from "./mocks/MockSuperToken.sol";
 import {MockCFAv1Forwarder} from "./mocks/MockCFAv1Forwarder.sol";
 import {MockPermit2} from "./mocks/MockPermit2.sol";
 import {MockUniswapRouter, MockMintableERC20} from "./mocks/MockUniswapRouter.sol";
+import {MockAggregatorV3} from "./mocks/MockAggregatorV3.sol";
 
 /// @notice Shared deployment fixture for the unit-test suite. Wires the protocol
 ///         up with mocks so behavior is deterministic and fork-free.
@@ -29,6 +31,7 @@ contract Base is Test {
 	StreamVaultsConfig internal config;
 	StreamVaults internal vaults;
 	SmartAccountDCA internal saImpl;
+	HybridPriceOracle internal oracle;
 
 	// Mocks
 	MockERC20Permit internal usdc; // underlying, 6 decimals
@@ -37,6 +40,11 @@ contract Base is Test {
 	MockPermit2 internal permit2;
 	MockUniswapRouter internal router;
 	MockMintableERC20 internal weth; // tokenOut, 18 decimals
+	MockAggregatorV3 internal usdcFeed; // USDC/USD, $1
+	MockAggregatorV3 internal wethFeed; // WETH/USD, $2
+
+	/// @dev Generous staleness so block-number rolls in tests never expire feeds.
+	uint256 internal constant FEED_STALENESS = 365 days;
 
 	uint256 internal constant WINDOW = 86_400; // 1 day
 	uint256 internal constant USDC_AMOUNT = 200e6; // 200 USDC
@@ -56,6 +64,14 @@ contract Base is Test {
 		// SmartAccountDCA implementation (clone target)
 		saImpl = new SmartAccountDCA();
 
+		// Hybrid price oracle with mock Chainlink feeds: USDC=$1, WETH=$2, so a
+		// 100 USDC (6-dec) swap expects 50 WETH (18-dec) out.
+		oracle = new HybridPriceOracle(deployer);
+		usdcFeed = new MockAggregatorV3(8, 1e8); // $1
+		wethFeed = new MockAggregatorV3(8, 2e8); // $2
+		oracle.setFeed(address(usdc), address(usdcFeed), FEED_STALENESS);
+		oracle.setFeed(address(weth), address(wethFeed), FEED_STALENESS);
+
 		// Config behind a UUPS proxy.
 		StreamVaultsConfig cfgImpl = new StreamVaultsConfig();
 		bytes memory cfgInit = abi.encodeCall(
@@ -66,6 +82,7 @@ contract Base is Test {
 				address(saImpl),
 				address(permit2),
 				address(router),
+				address(oracle),
 				address(forwarder),
 				WINDOW
 			)

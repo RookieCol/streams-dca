@@ -255,6 +255,80 @@ contract ExecuteSwapTest is Base {
 		vaults.executeSwap(sa, _goodParams());
 	}
 
+	/// SECURITY: the oracle floor is the trust anchor. A compromised executor sets
+	/// params.minAmountOut = 1 (the loosest non-zero bound it can) but the router
+	/// delivers BELOW the oracle floor. The swap MUST revert — the bot cannot
+	/// bypass the floor.
+	function test_executeSwap_revertBelowOracleFloor_evenWithMinOutOne() public {
+		// Oracle floor for 100 USDC ($1) -> WETH ($2) at 100bps = 50 WETH * 0.99.
+		uint256 floor = oracle.minAmountOut(
+			address(usdc),
+			address(weth),
+			SWAP_IN,
+			100
+		);
+		assertEq(floor, (50e18 * 9900) / 10_000, "floor = 49.5 WETH");
+
+		// Router delivers strictly below the floor.
+		router.configure(address(usdc), address(weth), floor - 1, false);
+
+		Types.SwapParams memory p = _goodParams();
+		p.minAmountOut = 1; // executor tries the loosest possible bound
+
+		vm.prank(bot);
+		vm.expectRevert(Errors.INSUFFICIENT_OUTPUT.selector);
+		vaults.executeSwap(sa, p);
+	}
+
+	/// Counterpart: a delivery exactly AT the oracle floor passes even when the
+	/// executor supplies minAmountOut = 1 (effectiveMin == floor here).
+	function test_executeSwap_atOracleFloor_passes() public {
+		uint256 floor = oracle.minAmountOut(
+			address(usdc),
+			address(weth),
+			SWAP_IN,
+			100
+		);
+		router.configure(address(usdc), address(weth), floor, false);
+
+		Types.SwapParams memory p = _goodParams();
+		p.minAmountOut = 1;
+
+		vm.prank(bot);
+		uint256 amountOut = vaults.executeSwap(sa, p);
+		assertEq(amountOut, floor, "delivery at floor settles");
+		assertEq(weth.balanceOf(settlement), floor, "settled to user");
+	}
+
+	/// effectiveMin == max(floor, params.minAmountOut): when the executor demands
+	/// MORE than the floor, its stricter bound is what binds. A delivery between
+	/// the floor and the executor's bound must revert.
+	function test_executeSwap_effectiveMinIsMaxOfFloorAndParam() public {
+		uint256 floor = oracle.minAmountOut(
+			address(usdc),
+			address(weth),
+			SWAP_IN,
+			100
+		);
+		// Executor demands strictly more than the floor.
+		uint256 stricter = floor + 1e18;
+
+		// Deliver above the floor but below the executor's stricter bound: reverts.
+		router.configure(address(usdc), address(weth), floor + 1, false);
+		Types.SwapParams memory p = _goodParams();
+		p.minAmountOut = stricter;
+		vm.prank(bot);
+		vm.expectRevert(Errors.INSUFFICIENT_OUTPUT.selector);
+		vaults.executeSwap(sa, p);
+
+		// Deliver at/above the stricter bound: passes.
+		router.configure(address(usdc), address(weth), stricter, false);
+		vm.roll(block.number + 1);
+		vm.prank(bot);
+		uint256 amountOut = vaults.executeSwap(sa, p);
+		assertEq(amountOut, stricter, "stricter executor bound binds");
+	}
+
 	/// The no-downgrade branch: superAmountIn == 0 with the SA pre-funded in the
 	/// underlying directly. The swap proceeds without any SuperToken downgrade.
 	function test_executeSwap_noDowngrade() public {

@@ -10,9 +10,15 @@ import {StreamVaultsConfig} from "../src/core/StreamVaultsConfig.sol";
 import {SmartAccountDCA} from "../src/strategies/dca/SmartAccountDCA.sol";
 import {ISmartAccountDCA} from "../src/strategies/dca/interfaces/ISmartAccountDCA.sol";
 import {ISuperToken} from "../src/core/interfaces/external/ISuperToken.sol";
+import {HybridPriceOracle} from "../src/core/oracle/HybridPriceOracle.sol";
+import {IHybridPriceOracle} from "../src/core/interfaces/IHybridPriceOracle.sol";
+import {IAggregatorV3} from "../src/core/interfaces/external/IAggregatorV3.sol";
+import {ISortedOracles} from "../src/core/interfaces/external/ISortedOracles.sol";
+import {Errors} from "../src/core/libraries/Errors.sol";
 import {Types} from "../src/core/libraries/Types.sol";
 
 import {MockUniswapRouter, MockMintableERC20} from "./mocks/MockUniswapRouter.sol";
+import {MockAggregatorV3} from "./mocks/MockAggregatorV3.sol";
 
 /// @dev Test-side view of the real Superfluid SuperTokenFactory (auto-detect
 ///      decimals overload). Upgradability: NON_UPGRADABLE=0, SEMI_UPGRADABLE=1,
@@ -49,9 +55,19 @@ contract ForkCeloTest is Test {
 	address constant CFA_FORWARDER = 0xcfA132E353cB4E398080B9700609bb008eceB125;
 	address constant SUPERTOKEN_FACTORY = 0x36be86dEe6BC726Ed0Cbd170ccD2F21760BC73D9;
 	address constant CUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
+	address constant CELO = 0x471EcE3750Da237f93B8E339c536989b8978a438;
+
+	// Real Celo mainnet oracle infrastructure.
+	address constant CHAINLINK_CELO_USD =
+		0x0568fD19986748cEfF3301e55c0eb1E729E0Ab7e;
+	address constant CHAINLINK_CUSD_USD =
+		0xe38A27BE4E7d866327e09736F3C570F256FFd048;
+	address constant MENTO_SORTED_ORACLES =
+		0xefB84935239dAcdecF7c5bA76d8dE40b077B7b33;
 
 	uint8 constant SEMI_UPGRADABLE = 1;
 	uint256 constant WINDOW = 86_400;
+	uint256 constant FEED_STALENESS = 30 days;
 
 	address deployer = makeAddr("deployer");
 	address bot = makeAddr("bot");
@@ -61,10 +77,12 @@ contract ForkCeloTest is Test {
 	StreamVaultsConfig config;
 	StreamVaults vaults;
 	SmartAccountDCA saImpl;
+	HybridPriceOracle oracle;
 	address cusdx;
 
 	MockUniswapRouter router;
 	MockMintableERC20 tokenOut;
+	MockAggregatorV3 tokenOutFeed;
 
 	function setUp() public {
 		vm.createSelectFork(vm.envOr("CELO_RPC_URL", string("https://forno.celo.org")));
@@ -79,6 +97,12 @@ contract ForkCeloTest is Test {
 		// Fixed swap router (mock DEX substituting real cUSD-pair liquidity).
 		router = new MockUniswapRouter();
 
+		// Hybrid oracle wired to the REAL Celo Chainlink feeds + Mento fallback.
+		oracle = new HybridPriceOracle(deployer);
+		oracle.setFeed(CUSD, CHAINLINK_CUSD_USD, FEED_STALENESS);
+		oracle.setFeed(CELO, CHAINLINK_CELO_USD, FEED_STALENESS);
+		oracle.setSortedOracles(MENTO_SORTED_ORACLES);
+
 		StreamVaultsConfig cfgImpl = new StreamVaultsConfig();
 		config = StreamVaultsConfig(
 			address(
@@ -86,7 +110,7 @@ contract ForkCeloTest is Test {
 					address(cfgImpl),
 					abi.encodeCall(
 						StreamVaultsConfig.initialize,
-						(deployer, bot, address(saImpl), PERMIT2, address(router), CFA_FORWARDER, WINDOW)
+						(deployer, bot, address(saImpl), PERMIT2, address(router), address(oracle), CFA_FORWARDER, WINDOW)
 					)
 				)
 			)
@@ -159,9 +183,15 @@ contract ForkCeloTest is Test {
 		tokenOut = new MockMintableERC20("Wrapped Ether", "WETH");
 		tokenOut.mint(address(router), 1_000e18);
 
+		// Give the mock tokenOut a $1 feed so the oracle can price the cUSD->WETH
+		// leg (the accrued cUSD is small, so a $1 quote keeps the floor far below
+		// the 5e18 the mock router delivers).
+		tokenOutFeed = new MockAggregatorV3(8, 1e8);
+
 		vm.startPrank(deployer);
 		config.setSupportedSwapToken(CUSD, true);
 		config.setSupportedSwapToken(address(tokenOut), true);
+		oracle.setFeed(address(tokenOut), address(tokenOutFeed), FEED_STALENESS);
 		vm.stopPrank();
 
 		// tx1: approve underlying; tx2: grant flow-operator on the REAL forwarder;
@@ -203,6 +233,123 @@ contract ForkCeloTest is Test {
 
 		assertEq(got, outAmount, "swap output measured");
 		assertEq(tokenOut.balanceOf(settlement), outAmount, "tokenOut settled to user");
+	}
+
+	/// Probe: read the REAL Chainlink CELO/USD & cUSD/USD feeds and the REAL Mento
+	/// SortedOracles median rate for cUSD, and log their shape so the Mento quote
+	/// convention can be verified/pinned.
+	function test_fork_probeRealOracleSources() public {
+		(, int256 celoAns, , uint256 celoUpd, ) = IAggregatorV3(
+			CHAINLINK_CELO_USD
+		).latestRoundData();
+		(, int256 cusdAns, , uint256 cusdUpd, ) = IAggregatorV3(
+			CHAINLINK_CUSD_USD
+		).latestRoundData();
+		emit log_named_uint("chainlink CELO/USD decimals", IAggregatorV3(CHAINLINK_CELO_USD).decimals());
+		emit log_named_int("chainlink CELO/USD answer", celoAns);
+		emit log_named_uint("chainlink CELO/USD age (s)", block.timestamp - celoUpd);
+		emit log_named_int("chainlink cUSD/USD answer", cusdAns);
+		emit log_named_uint("chainlink cUSD/USD age (s)", block.timestamp - cusdUpd);
+
+		// Mento SortedOracles: rate feed id for cUSD is the cUSD token address.
+		ISortedOracles so = ISortedOracles(MENTO_SORTED_ORACLES);
+		uint256 n = so.numRates(CUSD);
+		emit log_named_uint("mento cUSD numRates", n);
+		if (n > 0) {
+			(uint256 num, uint256 den) = so.medianRate(CUSD);
+			emit log_named_uint("mento cUSD medianRate numerator", num);
+			emit log_named_uint("mento cUSD medianRate denominator", den);
+			emit log_named_uint("mento cUSD median age (s)", block.timestamp - so.medianTimestamp(CUSD));
+			// price (1e18) under our convention = num * 1e18 / den
+			emit log_named_uint("mento cUSD price 1e18 (num/den)", (num * 1e18) / den);
+		}
+
+		assertGt(celoAns, 0, "CELO/USD positive");
+		assertGt(cusdAns, 0, "cUSD/USD positive");
+	}
+
+	/// SECURITY on a real fork: compute the real oracle floor for a cUSD->CELO swap
+	/// from the REAL Chainlink cUSD/USD and CELO/USD feeds, then prove a mock-router
+	/// delivery BELOW the floor reverts and a delivery AT/above the floor passes.
+	/// @dev The delivery leg uses a mock 18-decimal tokenOut priced with the REAL
+	///      CELO/USD Chainlink feed. The real Celo GoldToken's `balanceOf` reverts
+	///      under this fork state (the same reason the whole suite substitutes a
+	///      mock router for real cUSD-pair liquidity), so the FLOOR is derived from
+	///      real on-chain prices while the token transfer stays deterministic.
+	function test_fork_realFloor_cusdToCelo() public {
+		_deployProtocol();
+		cusdx = _createWrapper();
+
+		uint256 amount = 100e18; // 100 cUSD
+		int96 rate = int96(1e12);
+
+		_fundCusd(user, amount);
+
+		// Mock CELO stand-in for the delivery leg (18 decimals like real CELO),
+		// priced with the REAL CELO/USD Chainlink feed.
+		tokenOut = new MockMintableERC20("Celo (mock delivery)", "CELO");
+		tokenOut.mint(address(router), 1_000e18);
+
+		vm.startPrank(deployer);
+		config.setSupportedSwapToken(CUSD, true);
+		config.setSupportedSwapToken(address(tokenOut), true);
+		oracle.setFeed(address(tokenOut), CHAINLINK_CELO_USD, FEED_STALENESS);
+		vm.stopPrank();
+
+		vm.startPrank(user);
+		IERC20(CUSD).approve(address(vaults), amount);
+		ICFAForwarderExt(CFA_FORWARDER).grantPermissions(cusdx, address(vaults));
+		address sa = vaults.onboard(cusdx, amount, rate, _rules2());
+		vm.stopPrank();
+
+		vm.warp(block.timestamp + 2 days);
+		uint256 accrued = IERC20(cusdx).balanceOf(sa);
+		assertGt(accrued, 0, "accrued cUSDx");
+
+		// Real oracle floor for swapping `accrued` cUSD -> CELO at 100 bps, using
+		// the REAL Chainlink cUSD/USD and CELO/USD prices.
+		uint256 floor = IHybridPriceOracle(address(oracle)).minAmountOut(
+			CUSD,
+			address(tokenOut),
+			accrued,
+			100
+		);
+		assertGt(floor, 0, "real floor computed");
+		emit log_named_uint("real cUSD->CELO floor (accrued)", floor);
+
+		Types.SwapParams memory p = Types.SwapParams({
+			superTokenIn: cusdx,
+			superAmountIn: accrued,
+			tokenIn: CUSD,
+			tokenOut: address(tokenOut),
+			fee: 3000,
+			amountIn: accrued,
+			minAmountOut: 1 // loosest executor bound
+		});
+
+		// Delivery BELOW the floor reverts even with minAmountOut == 1.
+		router.configure(CUSD, address(tokenOut), floor - 1, false);
+		vm.prank(bot);
+		vm.expectRevert(Errors.INSUFFICIENT_OUTPUT.selector);
+		vaults.executeSwap(sa, p);
+
+		// Delivery AT the floor passes.
+		router.configure(CUSD, address(tokenOut), floor, false);
+		vm.prank(bot);
+		uint256 got = vaults.executeSwap(sa, p);
+		assertEq(got, floor, "at-floor delivery settles");
+		assertEq(tokenOut.balanceOf(settlement), floor, "settled to user");
+	}
+
+	function _rules2() internal view returns (Types.UserRules memory r) {
+		address[] memory t = new address[](1);
+		t[0] = address(tokenOut);
+		r = Types.UserRules({
+			maxSlippageBps: 100,
+			minTradeAmount: 1e6,
+			settlementAddress: settlement,
+			targetTokens: t
+		});
 	}
 
 	/// Negative counterpart to the happy path and the single most migration-critical
