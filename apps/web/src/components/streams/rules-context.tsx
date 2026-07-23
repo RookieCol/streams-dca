@@ -2,8 +2,14 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { flowRatePerDay as initialAmount } from "@/lib/mock-data";
+import {
+  DEFAULT_ASSETS,
+  DEFAULT_INPUT_CURRENCY,
+  type Asset,
+  type InputCurrency,
+} from "@/lib/tokens";
 
-export type Asset = "WETH" | "WBTC";
+export type { Asset, InputCurrency } from "@/lib/tokens";
 export type Frequency = "daily" | "weekly" | "biweekly" | "monthly";
 export type RiskLevel = "low" | "medium" | "high";
 
@@ -35,6 +41,7 @@ export const RISK_OPTIONS: { value: RiskLevel; label: string }[] = [
 
 type RulesState = {
   assets: Asset[];
+  inputCurrency: InputCurrency;
   flowRatePerDay: number;
   frequency: Frequency;
   riskLevel: RiskLevel;
@@ -45,6 +52,7 @@ type RulesState = {
 
 type RulesContextValue = RulesState & {
   setAssets: (assets: Asset[]) => void;
+  setInputCurrency: (value: InputCurrency) => void;
   setFlowRatePerDay: (value: number) => void;
   setFrequency: (value: Frequency) => void;
   setRiskLevel: (value: RiskLevel) => void;
@@ -56,7 +64,8 @@ type RulesContextValue = RulesState & {
 const RulesContext = createContext<RulesContextValue | null>(null);
 
 export function RulesProvider({ children }: { children: ReactNode }) {
-  const [assets, setAssets] = useState<Asset[]>(["WETH", "WBTC"]);
+  const [assets, setAssets] = useState<Asset[]>(DEFAULT_ASSETS);
+  const [inputCurrency, setInputCurrency] = useState<InputCurrency>(DEFAULT_INPUT_CURRENCY);
   const [flowRatePerDay, setFlowRatePerDay] = useState(initialAmount);
   const [frequency, setFrequency] = useState<Frequency>("daily");
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("medium");
@@ -69,6 +78,8 @@ export function RulesProvider({ children }: { children: ReactNode }) {
       value={{
         assets,
         setAssets,
+        inputCurrency,
+        setInputCurrency,
         flowRatePerDay,
         setFlowRatePerDay,
         frequency,

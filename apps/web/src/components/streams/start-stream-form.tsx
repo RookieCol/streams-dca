@@ -13,10 +13,17 @@ import {
   type Frequency,
   type RiskLevel,
 } from "./rules-context";
+import {
+  INPUT_CURRENCIES,
+  DEFAULT_INPUT_CURRENCY,
+  targetsFor,
+  type InputCurrency,
+} from "@/lib/tokens";
 
 type FormState = {
   budget: string;
   flowRate: string;
+  inputCurrency: InputCurrency;
   asset: Asset | "";
   frequency: Frequency;
   riskLevel: RiskLevel;
@@ -24,7 +31,14 @@ type FormState = {
 
 type FormErrors = Partial<Record<"budget" | "flowRate" | "asset", string>>;
 
-const INITIAL: FormState = { budget: "", flowRate: "", asset: "", frequency: "daily", riskLevel: "medium" };
+const INITIAL: FormState = {
+  budget: "",
+  flowRate: "",
+  inputCurrency: DEFAULT_INPUT_CURRENCY,
+  asset: "",
+  frequency: "daily",
+  riskLevel: "medium",
+};
 
 function validate(form: FormState): FormErrors {
   const errors: FormErrors = {};
@@ -56,6 +70,7 @@ export function StartStreamForm({
   onSubmit: (values: {
     budget: number;
     flowRate: number;
+    inputCurrency: InputCurrency;
     asset: Asset;
     frequency: Frequency;
     riskLevel: RiskLevel;
@@ -70,6 +85,16 @@ export function StartStreamForm({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  // Switching the input currency may invalidate the picked target (same-token
+  // reject, e.g. USDC -> USDC): clear it so the user re-picks a valid one.
+  function updateInputCurrency(next: InputCurrency) {
+    setForm((f) => ({
+      ...f,
+      inputCurrency: next,
+      asset: (f.asset as string) === (next as string) ? "" : f.asset,
+    }));
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const nextErrors = validate(form);
@@ -82,6 +107,7 @@ export function StartStreamForm({
       onSubmit({
         budget: Number(form.budget),
         flowRate: Number(form.flowRate),
+        inputCurrency: form.inputCurrency,
         asset: form.asset as Asset,
         frequency: form.frequency,
         riskLevel: form.riskLevel,
@@ -109,8 +135,31 @@ export function StartStreamForm({
       <form onSubmit={handleSubmit} className="mt-6 flex flex-1 flex-col" noValidate>
         <div className="flex-1 space-y-5">
           <div>
+            <p className="text-sm font-medium text-ink">Pay with</p>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              {INPUT_CURRENCIES.map((cur) => (
+                <button
+                  key={cur}
+                  type="button"
+                  onClick={() => updateInputCurrency(cur)}
+                  aria-pressed={form.inputCurrency === cur}
+                  className={cn(
+                    "rounded-xl border px-3.5 py-3 text-[15px] font-medium transition-colors",
+                    pressFeedback,
+                    form.inputCurrency === cur
+                      ? "border-ink bg-ink text-white"
+                      : "border-line bg-surface text-ink"
+                  )}
+                >
+                  {cur}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <label htmlFor="budget" className="text-sm font-medium text-ink">
-              Total amount (USDC)
+              Total amount ({form.inputCurrency})
             </label>
             <input
               id="budget"
@@ -130,7 +179,7 @@ export function StartStreamForm({
 
           <div>
             <label htmlFor="flowRate" className="text-sm font-medium text-ink">
-              Amount (USDC)
+              Amount ({form.inputCurrency})
             </label>
             <input
               id="flowRate"
@@ -174,7 +223,7 @@ export function StartStreamForm({
           <div>
             <p className="text-sm font-medium text-ink">Buy</p>
             <div className="mt-1.5 grid grid-cols-2 gap-2">
-              {(["WETH", "WBTC"] as const).map((asset) => (
+              {targetsFor(form.inputCurrency).map((asset) => (
                 <button
                   key={asset}
                   type="button"

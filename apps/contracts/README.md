@@ -107,13 +107,26 @@ External dependencies on **Celo mainnet (42220)**, verified against Uniswap depl
 
 ### Tokens (Celo mainnet)
 
+**Pay leg** — input currencies streamed in (the "sell" leg), whitelisted via
+`setSupportedSwapToken`:
+
 | Token | Address |
 |---|---|
-| CELO | `0x471EcE3750Da237f93B8E339c536989b8978a438` |
 | cUSD | `0x765DE816845861e75A25fCA122bb6898B8B1282a` |
-| cEUR | `0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73` |
-| USDC (Circle) | `0xcebA9300f2b948710d2653dD7B07f33A8B32118C` |
 | USDT | `0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e` |
+| USDC (Circle) | `0xcebA9300f2b948710d2653dD7B07f33A8B32118C` |
+| CELO | `0x471EcE3750Da237f93B8E339c536989b8978a438` |
+
+**Buy leg** — investment assets the user can DCA into (the MiniPay-promoted set:
+Gold, Ether, Bitcoin), whitelisted via `setSupportedSwapToken` and given an oracle
+price source. No stablecoins are purchasable:
+
+| Token | Address |
+|---|---|
+| XAUt0 (Gold) | `0xaf37E8B6C9ED7f6318979f56Fc287d76c30847ff` |
+| WETH (Wormhole) | `0x66803FB87aBd4aaC3cbB3fAd7C3aa01f6F3FB207` |
+| WBTC (Celo) | `0x8aC2901Dd8A1F17a1A4768A6bA4C3751e3995B2D` |
+| cETH | `0x2DEf4285787d58a2f811AF24755A8150622f4361` |
 
 ---
 
@@ -197,7 +210,8 @@ Status: **53 tests passing** (51 unit + 2 real-fork).
 - [x] Forced-recipient swaps via fixed Uniswap v3 `SwapRouter02`
 - [x] Unit + fork-based test suite (real Superfluid onboarding on the fork)
 - [x] On-chain hybrid oracle slippage floor tied to `maxSlippageBps` (Chainlink → Mento → TWAP sanity)
-- [ ] Deploy scripts (cUSDx via `SuperTokenFactory`, protocol wiring) + Celo address config file
+- [x] Deploy/config script (`script/Deploy.s.sol`): protocol wiring + token whitelist (both legs)
+- [ ] cUSDx via `SuperTokenFactory` + verified oracle price sources for the buy-leg assets
 - [ ] Remove unused `permit2` / `allowedTargets` config cruft; bot-key governance (multisig)
 
 ## References

@@ -12,7 +12,7 @@ import { RulesTab } from "./rules-tab";
 import { ActivityTab } from "./activity-tab";
 import { ProfileTab } from "./profile-tab";
 import { NotificationsSheet } from "./notifications-sheet";
-import { RulesProvider, useRules, type Asset, type Frequency, type RiskLevel } from "./rules-context";
+import { RulesProvider, useRules, type Asset, type Frequency, type RiskLevel, type InputCurrency } from "./rules-context";
 
 const TAB_TITLE: Record<TabKey, string> = {
   home: "Portfolio",
@@ -26,6 +26,7 @@ type PushedScreen = "none" | "projection" | "form" | "congrats";
 type StreamSubmission = {
   budget: number;
   flowRate: number;
+  inputCurrency: InputCurrency;
   asset: Asset;
   frequency: Frequency;
   riskLevel: RiskLevel;
@@ -62,6 +63,7 @@ function AppShellInner() {
           onSubmit={(values) => {
             setSubmission(values);
             rules.setAssets([values.asset]);
+            rules.setInputCurrency(values.inputCurrency);
             rules.setFlowRatePerDay(values.flowRate);
             rules.setFrequency(values.frequency);
             rules.setRiskLevel(values.riskLevel);

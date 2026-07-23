@@ -21,6 +21,7 @@ import {
   RISK_TO_PCT,
   type Asset,
 } from "./rules-context";
+import { targetsFor } from "@/lib/tokens";
 
 type RuleKey = "assets" | "amount" | "risk" | "minBuy" | null;
 
@@ -128,7 +129,7 @@ export function RulesTab() {
             <SheetDescription>Pick one or both — your amount splits evenly.</SheetDescription>
           </SheetHeader>
           <div className="mt-4 grid grid-cols-2 gap-2">
-            {(["WETH", "WBTC"] as const).map((asset) => (
+            {targetsFor(rules.inputCurrency).map((asset) => (
               <button
                 key={asset}
                 type="button"
@@ -168,7 +169,7 @@ export function RulesTab() {
           </SheetHeader>
           <div className="mt-4">
             <label htmlFor="amountDraft" className="text-sm font-medium text-ink">
-              USDC
+              {rules.inputCurrency}
             </label>
             <input
               id="amountDraft"
@@ -265,7 +266,7 @@ export function RulesTab() {
           </SheetHeader>
           <div className="mt-4">
             <label htmlFor="buyDraft" className="text-sm font-medium text-ink">
-              USDC
+              {rules.inputCurrency}
             </label>
             <input
               id="buyDraft"
