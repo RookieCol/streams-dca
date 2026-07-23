@@ -19,7 +19,7 @@ const NOTIFICATIONS = [
   {
     id: "2",
     icon: CheckCircle2,
-    title: "Bought $12.50 of WETH",
+    title: "Bought $12.50 of WBTC",
     detail: "Yesterday, as part of your Auto-Invest",
   },
   {

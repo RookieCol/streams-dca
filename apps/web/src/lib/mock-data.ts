@@ -16,9 +16,8 @@ export const balanceChangePctToday = 0.62;
 export const flowRatePerDay = 12.5;
 
 export const allocation = [
-  { label: "WBTC", pct: 54, color: "#F7931A" },
-  { label: "WETH", pct: 31, color: "#627EEA" },
-  { label: "cUSD buffer", pct: 15, color: "#C7CAD1" },
+  { label: "WBTC", pct: 85, color: "#F7931A" },
+  { label: "USDT buffer", pct: 15, color: "#26A17B" },
 ] as const;
 
 export const streamCycle = {
@@ -46,12 +45,12 @@ export const projectionHighlightYear = 5;
 export const currentValueUsd = balanceUsd;
 
 export const swapHistory = [
-  { id: "1", date: "Jul 21", pair: "cUSD → WBTC", amountUsd: 12.5, status: "done" },
-  { id: "2", date: "Jul 20", pair: "cUSD → WETH", amountUsd: 12.5, status: "done" },
-  { id: "3", date: "Jul 19", pair: "cUSD → WBTC", amountUsd: 12.5, status: "done" },
-  { id: "4", date: "Jul 18", pair: "cUSD → WBTC", amountUsd: 12.5, status: "done" },
-  { id: "5", date: "Jul 17", pair: "cUSD → XAUt0", amountUsd: 12.5, status: "done" },
-  { id: "6", date: "Jul 16", pair: "cUSD → WBTC", amountUsd: 12.5, status: "done" },
-  { id: "7", date: "Jul 15", pair: "cUSD → WETH", amountUsd: 12.5, status: "done" },
+  { id: "1", date: "Jul 21", pair: "USDT → WBTC", amountUsd: 12.5, status: "done" },
+  { id: "2", date: "Jul 20", pair: "USDT → WBTC", amountUsd: 12.5, status: "done" },
+  { id: "3", date: "Jul 19", pair: "USDT → WBTC", amountUsd: 12.5, status: "done" },
+  { id: "4", date: "Jul 18", pair: "USDT → WBTC", amountUsd: 12.5, status: "done" },
+  { id: "5", date: "Jul 17", pair: "USDT → WBTC", amountUsd: 12.5, status: "done" },
+  { id: "6", date: "Jul 16", pair: "USDT → WBTC", amountUsd: 12.5, status: "done" },
+  { id: "7", date: "Jul 15", pair: "USDT → WBTC", amountUsd: 12.5, status: "done" },
 ] as const;
 
