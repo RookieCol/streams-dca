@@ -107,26 +107,19 @@ External dependencies on **Celo mainnet (42220)**, verified against Uniswap depl
 
 ### Tokens (Celo mainnet)
 
-**Pay leg** — input currencies streamed in (the "sell" leg), whitelisted via
-`setSupportedSwapToken`:
+Current scope is a **single verified route: USDT → WBTC** (a hackathon happy path —
+one liquid Uniswap v3 pool, real Chainlink feeds on both legs, no contract changes).
+Both tokens are whitelisted via `setSupportedSwapToken`.
 
-| Token | Address |
-|---|---|
-| cUSD | `0x765DE816845861e75A25fCA122bb6898B8B1282a` |
-| USDT | `0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e` |
-| USDC (Circle) | `0xcebA9300f2b948710d2653dD7B07f33A8B32118C` |
-| CELO | `0x471EcE3750Da237f93B8E339c536989b8978a438` |
+| Role | Token | Address | Chainlink USD feed |
+|---|---|---|---|
+| Pay leg (input) | USDT | `0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e` | `0x5e37AF40A7A344ec9b03CCD34a250F3dA9a20B02` (USDT/USD) |
+| Buy leg (target) | WBTC (Celo) | `0x8aC2901Dd8A1F17a1A4768A6bA4C3751e3995B2D` | `0x128fE88eaa22bFFb868Bb3A584A54C96eE24014b` (BTC/USD) |
 
-**Buy leg** — investment assets the user can DCA into (the MiniPay-promoted set:
-Gold, Ether, Bitcoin), whitelisted via `setSupportedSwapToken` and given an oracle
-price source. No stablecoins are purchasable:
-
-| Token | Address |
-|---|---|
-| XAUt0 (Gold) | `0xaf37E8B6C9ED7f6318979f56Fc287d76c30847ff` |
-| WETH (Wormhole) | `0x66803FB87aBd4aaC3cbB3fAd7C3aa01f6F3FB207` |
-| WBTC (Celo) | `0x8aC2901Dd8A1F17a1A4768A6bA4C3751e3995B2D` |
-| cETH | `0x2DEf4285787d58a2f811AF24755A8150622f4361` |
+Uniswap v3 pool: USDT/WBTC `0x57332c214E647063bB4c5A73e5A8b7bbA79Be1E4` (0.3% tier) —
+the same pool MiniPay's production buy uses. No stablecoins are purchasable.
+Expanding to Ether (WETH) and Gold (XAUt0) is analyzed in
+[`docs/MIGRATION.md`](docs/MIGRATION.md).
 
 ---
 

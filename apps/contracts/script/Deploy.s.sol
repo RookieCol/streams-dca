@@ -10,29 +10,26 @@ import {SmartAccountDCA} from "../src/strategies/dca/SmartAccountDCA.sol";
 import {HybridPriceOracle} from "../src/core/oracle/HybridPriceOracle.sol";
 
 /// @title Deploy — StreamVaults DCA protocol wiring for Celo mainnet
-/// @notice Deploys the oracle, smart-account implementation, and the two UUPS
-///         proxies (Config + Vaults), then whitelists the pay-leg currencies and
-///         the buy-leg investment assets and registers their oracle price sources.
+/// @notice Hackathon happy path: a single verified route, **USDT -> WBTC**.
+///         Deploys the oracle, smart-account implementation, and the two UUPS
+///         proxies (Config + Vaults), whitelists USDT (input) + WBTC (target), and
+///         wires their real Celo Chainlink USD feeds. No contract changes, no TWAP
+///         fallback needed — both legs have live Chainlink feeds.
 ///
-/// @dev Token model (canonical, mirrors apps/web/src/lib/tokens.ts):
-///        - Pay leg (input, "sell"):  cUSD, USDT, USDC, CELO
-///        - Buy leg (target, "buy"):  XAUt0, WETH, WBTC, cETH  (investment assets only)
-///      Both legs must be in `_supportedSwapTokens`; the swap validates tokenIn AND
-///      tokenOut against it (StreamVaults._executeSwap).
+/// @dev Token model (mirrors apps/web/src/lib/tokens.ts):
+///        - Pay leg (input):  USDT
+///        - Buy leg (target):  WBTC
+///      Both must be in `_supportedSwapTokens` (StreamVaults._executeSwap validates
+///      tokenIn AND tokenOut). WETH / XAUt0 / cETH are out of scope — see
+///      apps/contracts/docs/MIGRATION.md.
 ///
-///      Run (dry-run, no broadcast):
-///        forge script script/Deploy.s.sol --rpc-url celo
-///      Broadcast:
-///        forge script script/Deploy.s.sol --rpc-url celo --broadcast \
-///          --private-key $PRIVATE_KEY
+///      Run (dry-run):  forge script script/Deploy.s.sol --rpc-url celo
+///      Broadcast:      forge script script/Deploy.s.sol --rpc-url celo --broadcast \
+///                        --private-key $PRIVATE_KEY
 ///
-///      Env (all optional; sensible Celo-mainnet defaults below):
-///        BOT_ADDRESS      off-chain executor key (defaults to broadcaster)
-///        PROTOCOL_OWNER   owner of Config/Vaults/Oracle (defaults to broadcaster)
+///      Env (optional): BOT_ADDRESS, PROTOCOL_OWNER (both default to the broadcaster).
 contract Deploy is Script {
-	/// =====================
-	/// == Celo mainnet infra
-	/// =====================
+	/// ===== Celo mainnet infra =====
 
 	/// Uniswap v3 SwapRouter02 — the same router MiniPay's Squid multicall calls.
 	address constant SWAP_ROUTER = 0x5615CDAb10dc425a742d643d949a7F474C01abc4;
@@ -40,30 +37,20 @@ contract Deploy is Script {
 	address constant CFA_FORWARDER = 0xcfA132E353cB4E398080B9700609bb008eceB125;
 	/// Canonical Permit2 (reserved; not on the active swap path).
 	address constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
-	/// Mento SortedOracles (fallback price source; CELO-quoted only).
-	address constant MENTO_SORTED_ORACLES = 0xefB84935239dAcdecF7c5bA76d8dE40b077B7b33;
 
 	uint256 constant MIN_ACCUMULATION_WINDOW = 86_400; // 1 day
 
-	/// =====================
-	/// == Pay-leg tokens ===
-	/// =====================
+	/// ===== Tokens =====
 
-	address constant CUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
-	address constant USDT = 0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e;
-	address constant USDC = 0xcebA9300f2b948710d2653dD7B07f33A8B32118C;
-	address constant CELO = 0x471EcE3750Da237f93B8E339c536989b8978a438;
+	address constant USDT = 0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e; // input
+	address constant WBTC = 0x8aC2901Dd8A1F17a1A4768A6bA4C3751e3995B2D; // target
 
-	/// =====================
-	/// == Buy-leg tokens ===
-	/// =====================
+	/// ===== Chainlink USD feeds (Celo mainnet, verified on-chain, 8 dec, 240s) =====
 
-	address constant XAUT0 = 0xaf37E8B6C9ED7f6318979f56Fc287d76c30847ff;
-	address constant WETH = 0x66803FB87aBd4aaC3cbB3fAd7C3aa01f6F3FB207;
-	address constant WBTC = 0x8aC2901Dd8A1F17a1A4768A6bA4C3751e3995B2D;
-	address constant CETH = 0x2DEf4285787d58a2f811AF24755A8150622f4361;
+	address constant USDT_USD_FEED = 0x5e37AF40A7A344ec9b03CCD34a250F3dA9a20B02;
+	address constant BTC_USD_FEED = 0x128fE88eaa22bFFb868Bb3A584A54C96eE24014b;
 
-	/// @dev Max Chainlink staleness tolerated per feed (seconds).
+	/// @dev Feed heartbeat is 240s; allow generous staleness for demo robustness.
 	uint256 constant FEED_STALENESS = 1 hours;
 
 	function run() external {
@@ -78,38 +65,46 @@ contract Deploy is Script {
 
 		// 2. Config behind a UUPS proxy.
 		StreamVaultsConfig cfgImpl = new StreamVaultsConfig();
-		bytes memory cfgInit = abi.encodeCall(
-			StreamVaultsConfig.initialize,
-			(
-				owner,
-				bot,
-				address(saImpl),
-				PERMIT2,
-				SWAP_ROUTER,
-				address(oracle),
-				CFA_FORWARDER,
-				MIN_ACCUMULATION_WINDOW
-			)
-		);
 		StreamVaultsConfig config = StreamVaultsConfig(
-			address(new ERC1967Proxy(address(cfgImpl), cfgInit))
+			address(
+				new ERC1967Proxy(
+					address(cfgImpl),
+					abi.encodeCall(
+						StreamVaultsConfig.initialize,
+						(
+							owner,
+							bot,
+							address(saImpl),
+							PERMIT2,
+							SWAP_ROUTER,
+							address(oracle),
+							CFA_FORWARDER,
+							MIN_ACCUMULATION_WINDOW
+						)
+					)
+				)
+			)
 		);
 
 		// 3. Vaults gateway behind a UUPS proxy.
 		StreamVaults vaultsImpl = new StreamVaults();
-		bytes memory vaultsInit = abi.encodeCall(
-			StreamVaults.initialize,
-			(owner, address(config))
-		);
 		StreamVaults vaults = StreamVaults(
-			address(new ERC1967Proxy(address(vaultsImpl), vaultsInit))
+			address(
+				new ERC1967Proxy(
+					address(vaultsImpl),
+					abi.encodeCall(StreamVaults.initialize, (owner, address(config)))
+				)
+			)
 		);
 
-		// 4. Whitelist both legs. `_executeSwap` checks tokenIn AND tokenOut.
-		_whitelistTokens(config);
+		// 4. Whitelist both legs (tokenIn AND tokenOut are validated).
+		config.setSupportedSwapToken(USDT, true);
+		config.setSupportedSwapToken(WBTC, true);
 
-		// 5. Register oracle price sources for the buy-leg assets.
-		_configureOracleSources(oracle);
+		// 5. Wire the Chainlink USD feeds — both legs have live Celo feeds, so the
+		//    oracle's cross-price floor works with no TWAP fallback.
+		oracle.setFeed(USDT, USDT_USD_FEED, FEED_STALENESS);
+		oracle.setFeed(WBTC, BTC_USD_FEED, FEED_STALENESS);
 
 		vm.stopBroadcast();
 
@@ -117,53 +112,5 @@ contract Deploy is Script {
 		console2.log("StreamVaults:", address(vaults));
 		console2.log("HybridPriceOracle:", address(oracle));
 		console2.log("SmartAccountDCA impl:", address(saImpl));
-	}
-
-	/// @dev Owner-only; runs inside the broadcast as `owner == broadcaster`. If the
-	///      owner is a separate multisig, run this block from that key instead.
-	function _whitelistTokens(StreamVaultsConfig config) internal {
-		// Pay leg
-		config.setSupportedSwapToken(CUSD, true);
-		config.setSupportedSwapToken(USDT, true);
-		config.setSupportedSwapToken(USDC, true);
-		config.setSupportedSwapToken(CELO, true);
-		// Buy leg (investment assets only — no stablecoins are purchasable)
-		config.setSupportedSwapToken(XAUT0, true);
-		config.setSupportedSwapToken(WETH, true);
-		config.setSupportedSwapToken(WBTC, true);
-		config.setSupportedSwapToken(CETH, true);
-	}
-
-	/// @dev Registers the price source each buy-leg asset needs, otherwise
-	///      `SmartAccountDCA.executeSwap` reverts NO_PRICE_SOURCE.
-	///
-	///      REQUIRED BEFORE MAINNET: fill the Chainlink feed addresses below (and/or
-	///      a Uniswap v3 TWAP pool via `oracle.setTwapPool`). XAUt0 / WETH-Wormhole /
-	///      WBTC-Celo / cETH do NOT have obvious Celo Chainlink feeds — these MUST be
-	///      verified on-chain, not assumed. The Mento fallback is CELO-quoted and is
-	///      only sound for CELO; do NOT map it for non-CELO tokens (see README caveat).
-	///      Left as address(0) here so a swap fails loudly rather than mis-prices.
-	function _configureOracleSources(HybridPriceOracle oracle) internal {
-		oracle.setSortedOracles(MENTO_SORTED_ORACLES);
-
-		// TODO(verify): Celo mainnet Chainlink USD aggregators for each asset.
-		address xaut0UsdFeed = vm.envOr("FEED_XAUT0_USD", address(0));
-		address wethUsdFeed = vm.envOr("FEED_WETH_USD", address(0));
-		address wbtcUsdFeed = vm.envOr("FEED_WBTC_USD", address(0));
-		address cethUsdFeed = vm.envOr("FEED_CETH_USD", address(0));
-
-		if (xaut0UsdFeed != address(0)) oracle.setFeed(XAUT0, xaut0UsdFeed, FEED_STALENESS);
-		if (wethUsdFeed != address(0)) oracle.setFeed(WETH, wethUsdFeed, FEED_STALENESS);
-		if (wbtcUsdFeed != address(0)) oracle.setFeed(WBTC, wbtcUsdFeed, FEED_STALENESS);
-		if (cethUsdFeed != address(0)) oracle.setFeed(CETH, cethUsdFeed, FEED_STALENESS);
-
-		// The pay-leg stablecoins also need a USD price for the cross. cUSD/USDC/USDT
-		// are $1-pegged; set their Chainlink feeds here too (env-supplied, verify).
-		address cusdUsdFeed = vm.envOr("FEED_CUSD_USD", address(0));
-		address usdcUsdFeed = vm.envOr("FEED_USDC_USD", address(0));
-		address usdtUsdFeed = vm.envOr("FEED_USDT_USD", address(0));
-		if (cusdUsdFeed != address(0)) oracle.setFeed(CUSD, cusdUsdFeed, FEED_STALENESS);
-		if (usdcUsdFeed != address(0)) oracle.setFeed(USDC, usdcUsdFeed, FEED_STALENESS);
-		if (usdtUsdFeed != address(0)) oracle.setFeed(USDT, usdtUsdFeed, FEED_STALENESS);
 	}
 }
