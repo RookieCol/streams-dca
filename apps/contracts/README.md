@@ -156,9 +156,17 @@ whose approval is bounded to the exact `amountIn`. The executor supplies only
 calldata, or recipient. Permit2 is not used on this path (SwapRouter02 pulls via a plain ERC-20
 allowance).
 
-> Residual risk: `minAmountOut` is still executor-supplied, so a compromised executor could
-> still trade at a bad price (MEV/sandwich). Fully closing that requires an on-chain
-> price-oracle floor tied to the user's `maxSlippageBps` — tracked as a follow-up.
+The executor-supplied `minAmountOut` is no longer the trust anchor: `SmartAccountDCA` derives
+an **on-chain price floor** from the user's `maxSlippageBps` via a hybrid oracle
+(`HybridPriceOracle`) — **Chainlink** feeds (USD cross) primary, **Mento SortedOracles**
+fallback, optional **Uniswap v3 TWAP** sanity band — and enforces
+`amountOut >= max(oracleFloor, minAmountOut)`. A compromised executor can only make the floor
+*stricter*, never looser, so it can no longer drain via a bad-price swap.
+
+> Caveats: the Mento fallback yields a **CELO-quoted** price and is only sound when mapped for
+> CELO (Chainlink covers the other supported tokens directly); do not configure it for
+> non-CELO tokens. The oracle is new, security-sensitive code and warrants an adversarial
+> review before mainnet.
 
 ---
 
@@ -188,8 +196,9 @@ Status: **53 tests passing** (51 unit + 2 real-fork).
 - [x] `approve()` + single-call `onboard()` entrypoint
 - [x] Forced-recipient swaps via fixed Uniswap v3 `SwapRouter02`
 - [x] Unit + fork-based test suite (real Superfluid onboarding on the fork)
+- [x] On-chain hybrid oracle slippage floor tied to `maxSlippageBps` (Chainlink → Mento → TWAP sanity)
 - [ ] Deploy scripts (cUSDx via `SuperTokenFactory`, protocol wiring) + Celo address config file
-- [ ] On-chain oracle-derived slippage floor tied to `maxSlippageBps` (harden vs. a compromised executor)
+- [ ] Remove unused `permit2` / `allowedTargets` config cruft; bot-key governance (multisig)
 
 ## References
 
