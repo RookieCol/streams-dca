@@ -83,3 +83,100 @@ irreducible on their own.
   with `feeCurrency = cUSD` so users never need CELO.
 - **Liquidity** — confirm Uniswap v3 depth on Celo for the target DCA pairs; keep Ubeswap as
   a whitelistable fallback target if needed.
+
+---
+
+## Buy-flow research findings (MiniPay parity)
+
+Investigation into MiniPay's production "Buy" flow and what it takes to offer the same
+assets (BTC / ETH / Gold) in this protocol.
+
+### How MiniPay's buy actually works (on-chain analysis)
+
+MiniPay's buy is **three plain EOA transactions** (nonces 0/1/2), all Celo **type-123
+(CIP-64)** with `feeCurrency` set — i.e. gas paid in a stablecoin, no CELO needed. No
+account abstraction, no ERC-4337, no permits.
+
+1. `approve(SquidProxy, MAX)` on USDT.
+2. `SquidProxy.fundAndRunMulticall(USDT, amount, calls[])` on the Squid Router proxy
+   `0xce16F69375520ab01377ce7B88f5BA8C48F8D666`, where `calls[]` = `USDT.approve(SwapRouter,
+   MAX)` + `SwapRouter02.exactInputSingle(USDT -> tokenOut, recipient = user)`.
+
+The Uniswap router is `SwapRouter02 0x5615CDAb10dc425a742d643d949a7F474C01abc4` — **the same
+router this protocol already uses**. Between assets, **only `tokenOut` changes**. The
+"no visible signing" UX is the embedded MiniPay wallet auto-signing normal txs, not any
+signature scheme this repo lacks. We deliberately keep our on-chain DCA (bot-triggered,
+forced-recipient, oracle floor) instead of Squid's off-chain-generated calldata — Squid's
+generic multicall + arbitrary calldata is exactly what our forced-recipient model rejects.
+
+### Celo liquidity map (Uniswap v3, verified via RPC)
+
+| Target | Direct cUSD pool | Direct USDT pool |
+|---|---|---|
+| WETH  | ✅ cUSD@0.3% (liq 3.8e15) | ✅ USDT@0.01% (liq 1.7e11) |
+| cETH  | ✅ cUSD@0.05% (liq 1.3e15) | ❌ USDT@0.3% liq **0** |
+| WBTC  | ❌ none liquid | ✅ USDT@0.3% (liq 1.3e10) |
+| XAUt0 | ❌ none liquid | ✅ USDT@0.3% (liq 2.8e10) |
+
+MiniPay buys BTC/Gold from **USDT** precisely because there is no direct cUSD pool for them.
+
+### Celo Chainlink coverage (verified on-chain)
+
+Present (all verified live via `latestRoundData`): cUSD/USD `0xe38A…d048`, CELO/USD
+`0x0568…Ab7e`, **BTC/USD** `0x128fE88eaa22bFFb868Bb3A584A54C96eE24014b`, **ETH/USD**
+`0x1FcD30A73D67639c1cD89ff5746E7585731c083B`, **USDT/USD**
+`0x5e37AF40A7A344ec9b03CCD34a250F3dA9a20B02` (plus USDC/USD, EUR/USD, and many fiat
+pairs). **Absent: XAU/USD (gold).** So WBTC and WETH can be priced from Chainlink
+directly; **XAUt0 cannot** (`HybridPriceOracle._usdPrice` needs a USD price for both
+legs).
+
+### Current scope decision (hackathon)
+
+Ship the single **USDT → WBTC** route (Bitcoin — the MiniPay flagship): one liquid pool
+(the exact one MiniPay uses) + live Chainlink feeds on both legs (USDT/USD, BTC/USD) →
+the existing cross-price oracle floor works with **zero contract changes**. Wired in
+`script/Deploy.s.sol`. WETH is equally feasible (ETH/USD exists) but out of scope to keep
+one clean path; cETH is dropped (no liquid USDT pool, redundant with WETH).
+
+### Deferred — enabling XAUt0 (Gold), needs oracle work
+
+Adding WETH later is trivial (has a Chainlink feed). **XAUt0 is the one that needs oracle
+work**: XAU/USD is absent on Celo Chainlink, so it can't be priced cross-feed. The blocker
+is the price source, not liquidity (a USDT/XAUt0 pool exists). Two options:
+
+- **TWAP-primary (fast, no deps):** reuse the existing `_twapQuote` in
+  `HybridPriceOracle` to quote the USDT/asset pool directly when no USD feed exists.
+  Weakness: the TWAP comes from the same pool being swapped → manipulable; mitigate with a
+  long window + the deviation guard + the bot's `minAmountOut`.
+- **Pyth (robust, production):** Pyth is on Celo (`0xff1a0f4744e8582DF1aE09D5611b887B6a12925C`,
+  legacy "Not upgraded" contract — verify before use) and has BTC/USD `0xe62df6c8…b43`,
+  ETH/USD, XAU/USD, USDT/USD. Pull model: the bot fetches a signed `updateData` from Hermes,
+  `executeSwap` becomes `payable` and calls `updatePriceFeeds{value: getUpdateFee}` then
+  reads `getPriceNoOlderThan(id, maxAge)` → `Price{price, conf, expo, publishTime}`. Use
+  conf-adjusted prices (`price − k·conf` for tokenOut). Independent of the pool, so keep the
+  Uniswap TWAP as the sanity band to catch wrapped-token depeg (XAUt0 ≠ XAU, cETH ≠ ETH —
+  Pyth alone does not solve this). Cost: payable plumbing through
+  `StreamVaults.executeSwap → SmartAccountDCA.executeSwap`, bot must hold native CELO for
+  fees, added Wormhole guardian trust.
+
+Verdict: **Pyth-primary + pool-TWAP sanity** is the production choice and fits the existing
+primary→sanity structure; TWAP-primary is a valid faster bridge if the same-pool caveat is
+acceptable.
+
+### Roadmap / why the scope is small right now
+
+The target vision is the **full MiniPay-promoted set — BTC + ETH + Gold** — all bought from
+USDT through the same single-hop `exactInputSingle`, exactly like MiniPay (only `tokenOut`
+changes). We deliberately **reduced the hackathon scope to BTC (WBTC) only** because it is
+the one asset that ships with **zero contract changes and zero new dependencies** (live
+Chainlink BTC/USD + USDT/USD on Celo). The path to the rest is already scoped:
+
+1. **WETH (Ether)** — add-only: whitelist it + wire the existing ETH/USD feed. No contract
+   change. Can land immediately post-hackathon.
+2. **XAUt0 (Gold)** — needs the oracle work above (TWAP-primary now, or Pyth for
+   production) since XAU/USD is absent on Celo Chainlink.
+3. **Frontend real tx** — wire `approve` + `onboard` via viem with `feeCurrency = USDT`
+   (needs the USDTx SuperToken deployed) so the demo shows a live MiniPay transaction.
+
+Nothing here changes the architecture — it is all configuration + the one oracle extension
+for gold.
