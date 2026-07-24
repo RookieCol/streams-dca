@@ -1,0 +1,13 @@
+{
+  "type": "Agent",
+  "name": "StreamVaults DCA Executor",
+  "description": "Off-chain executor bot for StreamVaults: triggers recurring USDT->WBTC DCA swaps on Celo via StreamVaults.executeSwap, gated by an on-chain onlyBot check. See https://github.com/<org>/streams-dca/tree/main/apps/bot.",
+  "endpoints": [
+    {
+      "type": "wallet",
+      "address": "0x0000000000000000000000000000000000dEaD",
+      "chainId": 42220
+    }
+  ],
+  "supportedTrust": ["reputation"]
+}
